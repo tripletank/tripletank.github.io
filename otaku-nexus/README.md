@@ -1,4 +1,6 @@
-# OTAKU//NEXUS · v0.2 (improved)
+# OTAKU//NEXUS · v0.3 (improved)
+
+v0.3: Waifu Wing department (12 original archetype units: shrine maiden, maid, battle nun, kunoichi, pop idol, casino hostess, magical girl, council president, samurai, gothic doll, medic, racing queen), Chapter 5, weighted banner picks (no MINT-01 skew), no arena mirror matches, optional Hardcore rates toggle (UR 0.5%, pity 4000) in Data.
 
 Open `index.html` in any modern desktop or mobile browser — fully offline, no install, no account, no payments. Or play online: https://tripletank.github.io/otaku-nexus/
 

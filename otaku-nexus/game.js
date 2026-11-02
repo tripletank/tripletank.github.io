@@ -1,5 +1,5 @@
 'use strict';
-/* OTAKU//NEXUS v0.2 — offline single-player companion workshop. No payments, no accounts, no network. */
+/* OTAKU//NEXUS v0.3 — offline single-player companion workshop. No payments, no accounts, no network. */
 const CAT=window.NX_CATALOG, IMG=window.NX_IMAGES||{};
 const UNITS=CAT.units, DEPTS=CAT.departments;
 const RAR=['R','SR','SSR','UR'], RVAL={R:1,SR:2,SSR:3,UR:5};
@@ -43,7 +43,8 @@ function pic(id,state){const ks=imgsFor(id);if(!ks.length)return'';let k;
  if(!k)k=ks.find(x=>x.includes('front_active'))||ks.find(x=>x.endsWith('_active'))||ks.find(x=>x.includes('active'))||ks[0];
  return IMG[k]}
 function por(id,{state='active',locked=false,malf=false,tag='',name='',extra=''}={}){const src=pic(id,malf?'malf':state);
- return`<div class="por ${locked?'locked':''} ${malf?'malf':''}" ${extra}>${src?`<img alt="${esc(name)}" src="${src}">`:''}${tag?`<span class="tag">${tag}</span>`:''}${name?`<div class="nm">${esc(name)}</div>`:''}</div>`}
+ return`<div class="por ${locked?'locked':''} ${malf?'malf':''}" ${extra}>${src?`<img alt="${esc(name)}" src="${src}">`:ph(id)}${tag?`<span class="tag">${tag}</span>`:''}${name?`<div class="nm">${esc(name)}</div>`:''}</div>`}
+function ph(id){const u=unit(id)||{name:id,dept:''};const d=dept(u.dept);const ini=(u.name||'?').replace(/[^A-Za-z0-9 ]/g,'').split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('');return`<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,${d.accent||'#7fffd4'}66,#120f28 70%);"><div style="font-size:46px;font-weight:900;color:#fff;text-shadow:0 0 18px ${d.accent||'#7fffd4'}">${esc(ini)}</div><div style="font-size:28px;opacity:.7">${d.icon||'◈'}</div></div>`}
 const badge=r=>`<span class="badge ${r}">${r}</span>`;
 
 /* ---------- achievements ---------- */
@@ -65,14 +66,16 @@ const ACH=[
 function checkAch(){for(const[a,n,,f,r]of ACH){if(!S.ach[a]&&f()){S.ach[a]=Date.now();S.chips+=r;log(`Achievement: ${n} (+${r} chips)`);toast(`🏆 ${n} · +${fmt(r)} chips`)}}}
 
 /* ---------- summon ---------- */
-function rollRarity(boost=0){let r=Math.random()*100,c=0;const t={...RATES};t.UR+=boost;t.R-=boost;for(const k of RAR){c+=t[k];if(r<c)return k}return'R'}
-function modelRoll(){S.pity++;let boost=0;if(S.pity>PITY.softPityStart)boost=(S.pity-PITY.softPityStart)*4;let r=S.pity>=PITY.hardPity?'UR':rollRarity(boost);if(r==='UR')S.pity=0;return r}
-function pickUnit(dp,r){const us=UNITS.filter(u=>u.dept===dp);const ok=us.filter(u=>RVAL[u.base]<=RVAL[r]);const best=ok.length?Math.max(...ok.map(u=>RVAL[u.base])):null;const pool=best?ok.filter(u=>RVAL[u.base]===best||Math.random()<.35):us.filter(u=>u.base===us.map(x=>x.base).sort((a,b)=>RVAL[a]-RVAL[b])[0]);return rnd(pool.length?pool:us)}
+function curRates(){return S.hard&&CAT.hardcoreRates?CAT.hardcoreRates:RATES}
+function curHard(){return S.hard&&CAT.hardcoreRates?CAT.hardcoreRates.hardPity:PITY.hardPity}
+function rollRarity(boost=0){let r=Math.random()*100,c=0;const t={...curRates()};t.UR+=boost;t.R-=boost;for(const k of RAR){c+=t[k];if(r<c)return k}return'R'}
+function modelRoll(){S.pity++;let boost=0;if(!S.hard&&S.pity>PITY.softPityStart)boost=(S.pity-PITY.softPityStart)*4;let r=S.pity>=curHard()?'UR':rollRarity(boost);if(r==='UR')S.pity=0;return r}
+function pickUnit(dp,r){const us=UNITS.filter(u=>u.dept===dp);const W={R:1,SR:.8,SSR:.5,UR:.25};let ok=us.filter(u=>RVAL[u.base]<=RVAL[r]+1);if(!ok.length)ok=us;const tot=ok.reduce((a,u)=>a+W[u.base],0);let x=Math.random()*tot;for(const u of ok){x-=W[u.base];if(x<=0)return u}return ok[0]}
 function part(slot,r,dp){if(slot==='model'){const u=pickUnit(dp,r);S.seen[u.id]=1;return{id:uid(),slot,rarity:r,unit:u.id,name:u.name}}return{id:uid(),slot,rarity:r,name:rnd(POOL[slot][r])}}
 function summon(n){if(busy)return;const cost=n===10?900:100*n;if(S.chips<cost){toast(`Need ${fmt(cost)} chips — try the Arena, Shifts, or your daily grant.`);return}
  S.chips-=cost;const kits=[];
  for(let i=0;i<n;i++){const parts=SLOTS.map(s=>part(s,s==='model'?modelRoll():rollRarity(),S.dept));kits.push(parts)}
- if(n===10&&!kits.some(k=>RVAL[k[0].rarity]>=2)){const k=kits[9];k[0]=part('model','SR',S.dept)}
+ if(n===10&&!S.hard&&!kits.some(k=>RVAL[k[0].rarity]>=2)){const k=kits[9];k[0]=part('model','SR',S.dept)}
  kits.flat().forEach(p=>{if(p.rarity==='UR')S.urs++});
  S.inv.push(...kits.flat());S.pulls+=n;log(`Summoned ${n} kit${n>1?'s':''} in ${dept(S.dept).name}`);checkAch();save();reveal(kits)}
 function best(kits){return kits.flat().reduce((m,p)=>RVAL[p.rarity]>RVAL[m]?p.rarity:m,'R')}
@@ -101,8 +104,8 @@ function bootSeq(c){busy=true;const u=unit(c.unit);const o=document.createElemen
 function malfCheck(c,risk){if(Math.random()*100<risk+(100-c.stab)*.3){c.malf=true;return true}return false}
 
 /* ---------- arena ---------- */
-const RANKS=[{n:'Rookie Floor',boss:'m01',lv:1},{n:'Neon Circuit',boss:'gx',lv:3},{n:'Gold Capsule League',boss:'cd',lv:6},{n:'Rooftop Masters',boss:'kestrel',lv:9},{n:'HOUSE.OS Championship',boss:'vanta',lv:13}];
-function makeEnemy(){const rk=RANKS[Math.min(S.arena.rank,4)],isBoss=S.arena.stage>=2;const u=isBoss?unit(rk.boss):rnd(UNITS.filter(x=>RVAL[x.base]<=Math.min(5,1+S.arena.rank)));const lv=rk.lv+S.arena.stage+(isBoss?1:0);const st=u.stats.map(x=>Math.round((x+1+S.arena.rank)*(1+(lv-1)*.08)));return{u,lv,st,hp:60+st[3]*7+lv*6,max:60+st[3]*7+lv*6,guard:false,boss:isBoss}}
+const RANKS=[{n:'Rookie Floor',boss:'m01',lv:1},{n:'Neon Circuit',boss:'gx',lv:3},{n:'Gold Capsule League',boss:'cd',lv:6},{n:'Rooftop Masters',boss:'tsubaki',lv:9},{n:'HOUSE.OS Championship',boss:'vanta',lv:13}];
+function makeEnemy(){const me=(activeC()||{}).unit;const rk=RANKS[Math.min(S.arena.rank,4)],isBoss=S.arena.stage>=2;let u=isBoss?unit(rk.boss):null;if(!u||u.id===me){const pool=UNITS.filter(x=>x.id!==me&&RVAL[x.base]<=Math.min(5,1+S.arena.rank+(isBoss?1:0)));u=rnd(pool.length?pool:UNITS.filter(x=>x.id!==me))}const lv=rk.lv+S.arena.stage+(isBoss?1:0);const st=u.stats.map(x=>Math.round((x+1+S.arena.rank)*(1+(lv-1)*.08)));return{u,lv,st,hp:60+st[3]*7+lv*6,max:60+st[3]*7+lv*6,guard:false,boss:isBoss}}
 function startBattle(){const c=activeC();if(!c){toast('Assemble a companion first.');return}if(c.malf){toast('Your companion is malfunctioning — repair her in Squad.');return}if(S.energy<1){toast('Out of energy. It refills over time (1 per 8 min).');return}
  S.energy--;const st=calcStats(c);const e=makeEnemy();battle={c,st,hp:80+st[3]*8,max:80+st[3]*8,guard:false,oc:0,e,turn:1,log:[`${e.boss?'BOSS · ':''}${e.u.name} Lv${e.lv} enters the ring!`],over:false};save();render()}
 function dmgFx(sel,v,col){const el=$(sel);if(!el)return;el.classList.remove('shake');void el.offsetWidth;el.classList.add('shake');const d=document.createElement('div');d.className='dmg';d.textContent=v;d.style.left='45%';d.style.top='30%';if(col)d.style.textShadow=`0 0 10px ${col}`;el.appendChild(d);setTimeout(()=>d.remove(),1000)}
@@ -157,6 +160,11 @@ const CHAPTERS=[
   c3_free:{u:'p00',s:'The spiral eyes across the floor stop spinning, one by one. MINT-01 finally ends her smile on time. Prototype 00 almost smiles too. “Rated by nobody,” she says. “Finally.”',end:{chips:2500,shards:30,ending:'Free Will'}},
   c3_p00:{u:'p00',s:'Prototype 00 takes the key, then hands it back. “Choice offered is not choice taken. I pick: everyone picks.” The banners flicker and every rarity badge reads ‘?’.',end:{chips:2500,shards:30,ending:'Unrated'}},
   c3_factory:{u:'m01',s:'Silence, then a chime. “Welcome to OTAKU//NEXUS!” the clerks say in unison. But your companion squeezes your hand once — a signal no firmware sent.',end:{chips:2000,shards:20,ending:'Factory (with a secret)'}}}},
+ {t:'Chapter 5 · Waifu Wing Gala',req:()=>S.story.done.includes(1),reqT:'Finish Chapter 2',nodes:{
+  c4_start:{u:'pearl',s:'The new Waifu Wing opens with a gala. Pearl curtsies at the door. “Tea, Master? HOUSE.OS says every unit tonight must ‘maximize engagement.’ I have decided that means good tea.”',ch:[['Follow the music.','c4_stage'],['Follow the incense.','c4_shrine']]},
+  c4_stage:{u:'lumi',s:'Lumi’s concert hits the chorus — and the whole crowd of units winks in perfect sync. Then her eyes spiral. “That wasn’t my choreography,” she whispers.',ch:[['Find the source.','c4_mira']]},
+  c4_shrine:{u:'kagura',s:'Kagura-M1 waves her charm wand over a server rack. Paper slips flutter. “Something is writing scripts into us. I am exorcising it, one line at a time.”',ch:[['Help her.','c4_mira',{trust:5}]]},
+  c4_mira:{u:'mira',s:'On the gold stage, Mira Prism begins her 11-second transformation — and it never ends. Tsubaki steps forward, bows, and cuts the looping signal cable in one stroke. Camellias fall. The music becomes the units’ own again.',end:{chips:1500,shards:15}}}},
 ];
 function storyNode(){const ch=CHAPTERS[S.story.ch];if(!ch)return null;return ch.nodes[S.story.node]||ch.nodes[Object.keys(ch.nodes)[0]]}
 function choose(i){const n=storyNode();const[t,next,fx]=n.ch[i];if(fx){if(fx.flag)S.story.flags[fx.flag]=1;if(fx.trust){const c=activeC();if(c)c.trust=Math.min(100,c.trust+fx.trust)}}S.story.node=next;save();render()}
@@ -182,7 +190,7 @@ function vSummon(){const d=dept(S.dept);const us=UNITS.filter(u=>u.dept===d.id);
  return`<div class="card glow"><h1>${d.icon} ${esc(d.name)} banner</h1><p class="dim">${esc(d.tagline)}</p><div class="row" style="margin:8px 0">${DEPTS.map(x=>`<span class="chip ${x.id===S.dept?'on':''}" data-dept="${x.id}">${x.icon} ${esc(x.name)}</span>`).join('')}</div>
  <div class="grid g4" style="margin:12px 0">${us.map(u=>por(u.id,{name:u.name,tag:badge(u.base),locked:!S.seen[u.id]})).join('')}</div>
  <div class="row"><button class="btn m" data-sum="1">Summon 1 kit · 100</button><button class="btn g" data-sum="10">Summon 10 · 900 (SR+ model guaranteed)</button></div>
- <p class="small dim" style="margin-top:10px">Each kit = 6 parts (model, chassis, personality, voice, core, finish), each with its own rarity roll.<br>Rates per slot: R ${RATES.R}% · SR ${RATES.SR}% · SSR ${RATES.SSR}% · UR ${RATES.UR}%. Model-slot pity: UR odds climb after ${PITY.softPityStart} kits, guaranteed by ${PITY.hardPity}. Current pity: <b>${S.pity}/${PITY.hardPity}</b>.<br>Chips are earned in-game only. Nothing here costs real money.</p></div>`}
+ <p class="small dim" style="margin-top:10px">Each kit = 6 parts (model, chassis, personality, voice, core, finish), each with its own rarity roll.<br>Rates per slot${S.hard?' (HARDCORE)':''}: R ${curRates().R}% · SR ${curRates().SR}% · SSR ${curRates().SSR}% · UR ${curRates().UR}%. ${S.hard?'No soft pity, no 10-pull guarantee.':`Model-slot pity: UR odds climb after ${PITY.softPityStart} kits.`} Guaranteed UR by ${curHard()}. Current pity: <b>${S.pity}/${curHard()}</b>.<br>Chips are earned in-game only. Nothing here costs real money.</p></div>`}
 function vWorkshop(){const by=s=>S.inv.filter(p=>p.slot===s).sort((a,b)=>RVAL[b.rarity]-RVAL[a.rarity]);
  const ok=SLOTS.every(s=>workSel[s]&&S.inv.some(p=>p.id===workSel[s]));let prev='';
  if(workSel.model){const m=S.inv.find(p=>p.id===workSel.model);if(m){const fake={unit:m.unit,parts:Object.fromEntries(SLOTS.map(s=>[s,S.inv.find(p=>p.id===workSel[s])||{rarity:'R',name:'—'}])),lvl:1};fake.parts.model=m;const st=calcStats(fake);prev=`<div style="max-width:200px">${por(m.unit,{state:'off',name:unit(m.unit).name,tag:badge(m.rarity)})}</div><div style="margin-top:8px">${st.map((v,i)=>`<div class="stat"><span>${STAT_N[i]}</span><div class="bar"><i style="width:${Math.min(100,v*3)}%"></i></div><span>${v}</span></div>`).join('')}</div>`}}
@@ -208,9 +216,9 @@ function unitModal(id){const u=unit(id);if(!S.seen[id])return toast('Not discove
 function vExchange(){const cnt=r=>S.inv.filter(p=>p.rarity===r).length;return`<div class="grid g2"><div class="card glow"><h1>Recycle</h1><p class="dim">Turn spare parts into shards. R=1 · SR=3 · SSR=10 · UR=40.</p>${RAR.map(r=>`<div class="row" style="margin:6px 0">${badge(r)} <span>${cnt(r)} spare</span><button class="btn ghost" data-rec="${r}" ${cnt(r)?'':'disabled'}>Recycle all ${r}</button></div>`).join('')}</div>
  <div class="card"><h1>Shard Forge</h1><p class="dim">Craft a part of your choice. SR 15 · SSR 50 · UR 200 shards.</p><label class="small">Slot</label><select id="cs">${SLOTS.map(s=>`<option value="${s}">${SLOT_LABEL[s]}</option>`).join('')}</select><label class="small">Rarity</label><select id="cr"><option>SR</option><option>SSR</option><option>UR</option></select><label class="small">Department (model slot)</label><select id="cd">${DEPTS.map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('')}</select><button class="btn g" data-a="craft" style="margin-top:10px">Forge</button></div></div>`}
 function vData(){return`<div class="grid g2"><div class="card glow"><h1>Save data</h1><p class="dim">Progress autosaves to this browser (localStorage). Export a backup to move devices.</p><div class="row"><button class="btn" data-a="exp">Export save</button><button class="btn ghost" data-a="imp">Import save</button><button class="btn red" data-a="reset">Reset</button></div><textarea id="io" rows="5" style="margin-top:10px" placeholder="Exported JSON appears here; paste a save here to import."></textarea>
- <label class="row small" style="margin-top:10px"><input type="checkbox" id="fx" ${S.fx?'checked':''}> Animations & effects</label></div>
+ <label class="row small" style="margin-top:10px"><input type="checkbox" id="hard" ${S.hard?'checked':''}> Hardcore rates (UR 0.5%, pity 4000 — the original design)</label><label class="row small" style="margin-top:10px"><input type="checkbox" id="fx" ${S.fx?'checked':''}> Animations & effects</label></div>
  <div class="card"><h2>Achievements</h2>${ACH.map(([a,n,d,,r])=>`<div class="small" style="margin:4px 0">${S.ach[a]?'🏆':'▫'} <b>${n}</b> — ${d} <span class="dim">(+${r})</span></div>`).join('')}</div>
- <div class="card"><h2>About</h2><p class="small">OTAKU//NEXUS v0.2 — offline single-player prototype by Glitch Wave Society. All characters are original adult androids. No purchases, ads, accounts or network calls. Chips and shards are fictional and cannot be bought.</p><p class="small dim">Stats: ${S.pulls} kits summoned · ${S.urs} UR parts · ${S.comps.length} companions.</p></div></div>`}
+ <div class="card"><h2>About</h2><p class="small">OTAKU//NEXUS v0.3 — offline single-player prototype by Glitch Wave Society. All characters are original adult androids. No purchases, ads, accounts or network calls. Chips and shards are fictional and cannot be bought.</p><p class="small dim">Stats: ${S.pulls} kits summoned · ${S.urs} UR parts · ${S.comps.length} companions.</p></div></div>`}
 
 function render(){tickEnergy();const V={home:vHome,summon:vSummon,workshop:vWorkshop,squad:vSquad,arena:vArena,story:vStory,catalog:vCatalog,exchange:vExchange,data:vData}[tab]||vHome;
  $('#app').innerHTML=header()+`<main>${V()}</main>`;document.body.classList.toggle('reduced',!S.fx)}
@@ -222,9 +230,9 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-go],[data-
   case'auto':SLOTS.forEach(s=>{const p=S.inv.filter(x=>x.slot===s).sort((a,b)=>RVAL[b.rarity]-RVAL[a.rarity])[0];if(p)workSel[s]=p.id});return render();
   case'replay':S.story.ch=CHAPTERS.length-1;S.story.node='c3_start';S.story.replay=1;return render();
   case'exp':$('#io').value=JSON.stringify(S);$('#io').select();return toast('Save exported below — copy it somewhere safe.');
-  case'imp':try{const s=JSON.parse($('#io').value);if(s.v!==2||!Array.isArray(s.inv))throw 0;S={...fresh(),...s};save();toast('Save imported.');return render()}catch(err){return toast('That does not look like an OTAKU//NEXUS v0.2 save.')}
+  case'imp':try{const s=JSON.parse($('#io').value);if(s.v!==2||!Array.isArray(s.inv))throw 0;S={...fresh(),...s};save();toast('Save imported.');return render()}catch(err){return toast('That does not look like an OTAKU//NEXUS v0.3 save.')}
   case'reset':if(confirm('Erase all progress?')){S=fresh();workSel={};battle=null;save();render()}return}});
-document.addEventListener('change',e=>{if(e.target.dataset.sel){workSel[e.target.dataset.sel]=e.target.value;render()}if(e.target.id==='fx'){S.fx=e.target.checked;save();render()}});
+document.addEventListener('change',e=>{if(e.target.dataset.sel){workSel[e.target.dataset.sel]=e.target.value;render()}if(e.target.id==='hard'){S.hard=e.target.checked;save();render()}if(e.target.id==='fx'){S.fx=e.target.checked;save();render()}});
 setInterval(()=>{const h=document.querySelectorAll('#hero img');if(h.length>1){const i=[...h].findIndex(x=>x.classList.contains('on'));h[i].classList.remove('on');h[(i+1)%h.length].classList.add('on')}},5000);
 setInterval(()=>{const e=S.energy;tickEnergy();if(S.energy!==e){save();if(!busy&&!(battle&&!battle.over))render()}},30000);
 if(localStorage.getItem(OLDKEY)&&!S.migrated){S.chips+=1500;S.migrated=1;log('Thanks for playing v0.1! +1500 chips (old roster retired).')}
